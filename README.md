@@ -36,6 +36,49 @@ cp config.example.json config.json   # 或直接用向导配置，运行时自�
 
 详细功能、选项、常见问题见 **[使用手册.md](使用手册.md)**。
 
+## 支持的输入
+
+网页输入框（或 `--crawl`）直接粘贴：
+
+| 输入 | 结果 |
+|------|------|
+| BV 号 / 视频链接 | 全链路采集；多分 P 串行全采（P1 在根目录，P2 起在 `p02/`…） |
+| UP 主空间 | 按播放量/时间批量采该 UP 的视频 |
+| 搜索页链接 / 关键词 | 搜索结果批量采集 |
+| 热门 / 每周必看 / 推荐 / 历史 | 批量采集 |
+| 合集链接 | 按板块 + 偏移 + 批量数量分批；已采自动跳过 |
+| YouTube 视频 / 播放列表 / 频道 / 11 位 ID | Data API 采元数据+评论；装 yt-dlp 可下视频与字幕正文 |
+
+## 命令行速查
+
+```bash
+node src/main.js --crawl "BV1xx411c7mD"                    # 采集单个视频
+node src/main.js --crawl "合集链接" --section 导数 --limit 5 --offset 0
+node src/main.js --analyze <任务Id> all                    # LLM 综合分析
+node src/main.js --transcribe <任务Id> [--force]           # 语音转写补字幕
+node src/main.js --report <合集任务Id> --questions 8       # 合集知识报告
+node src/main.js --keyframes <任务Id> --top 5              # 关键帧分析
+node src/main.js --list / --status / --delete <任务Id>
+```
+
+## 配置速览（config.json）
+
+| 字段 | 作用 |
+|------|------|
+| `llm.baseUrl / apiKey / model` | 文本模型（任意 OpenAI 兼容 API） |
+| `llm.reasoningEffort` | 思考强度 none/low/high/max（如 Ollama Pro） |
+| `llm.vision.*` | 视觉模型（图片分析、关键帧画面识别） |
+| `cookies.bilibili` | B 站 Cookie（采完整评论/字幕/AI 总结需要） |
+| `asr.*` | 语音转写引擎（FunASR / whisper.cpp / 云端 API） |
+| `crawl.ffmpegPath` | ffmpeg 路径（合并 mp4、提取音轨） |
+| `youtube.apiKey` | YouTube Data API |
+
+全部字段见 [config.example.json](config.example.json)；环境变量注入方式见手册 6.3。
+
+## MCP 服务器
+
+启动后提供 `http://127.0.0.1:39010/mcp`，带 11 个工具：`crawl_bilibili`（及 search/uploader/popular/weekly/recommend 变体）、`crawl_youtube`、`list_archives`、`get_task_data`、`analyze_task`、`transcribe_task`。鉴权用本机令牌（`Authorization: Bearer <server.localToken>` 或 `?token=`）。
+
 ## 可选外部工具
 
 均不打包进仓库，按需放置：
