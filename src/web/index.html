@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SMR · 社交媒体研究助手</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <h1>📊 SMR 社交媒体研究助手</h1>
+  <div class="status">
+    <span id="svc-status" class="dot">●</span> <span id="svc-text">连接中…</span>
+    <button id="vision-toggle" class="mini" title="识图模型消费较高，可随时一键禁用/启用">🟡 识图模型: 加载中…</button>
+    <button id="setup-open" class="mini" title="配置文本/视觉模型与B站 Cookie">⚙️ 设置</button>
+    <span class="cfg" id="cfg-summary"></span>
+  </div>
+</header>
+
+<main>
+  <!-- 发起采集 -->
+  <section class="card" id="crawl-card">
+    <h2>🎯 发起采集</h2>
+    <div class="row">
+      <input id="crawl-input" type="text" placeholder="B站 URL / BV号 / YouTube 链接 / UP主空间 / 搜索 / 合集…" />
+      <button id="crawl-btn">开始</button>
+    </div>
+    <details class="opts">
+      <summary>高级选项</summary>
+      <label>弹幕上限 <input id="opt-danmaku" type="number" value="2000" min="0"></label>
+      <label>评论上限 <input id="opt-comments" type="number" value="1000" min="0"></label>
+      <label>楼中楼/楼 <input id="opt-sub" type="number" value="20" min="0"></label>
+      <label>批量数量 <input id="opt-limit" type="number" value="5" min="1" max="50"></label>
+      <label>下载清晰度
+        <select id="opt-quality">
+          <option value="1080p" selected>1080P（默认）</option>
+          <option value="720p">720P</option>
+          <option value="480p">480P</option>
+          <option value="360p">360P</option>
+          <option value="240p">240P</option>
+          <option value="highest">最高可用</option>
+          <option value="lowest">最低（省流量）</option>
+        </select>
+      </label>
+      <label>合集板块 <input id="opt-section" type="text" placeholder="如: 导数（合集链接时按板块下载）" style="width:220px"></label>
+      <label>合集偏移 <input id="opt-offset" type="number" value="0" min="0" title="从合集第 N 条开始（已采集的会自动跳过）"></label>
+      <label><input id="opt-video" type="checkbox" checked> 下载视频</label>
+      <label><input id="opt-audio" type="checkbox" checked> 下载音频</label>
+      <label>语音转写预设
+        <select id="opt-asr-preset" title="与设置页同一套预设，变更立即写入配置"></select>
+      </label>
+      <span id="opt-asr-preset-label" class="cfg"></span>
+      <label><input id="opt-asr" type="checkbox" checked> 无官方字幕时语音转写</label>
+      <label><input id="opt-noc" type="checkbox"> 跳过评论</label>
+      <label><input id="opt-nos" type="checkbox"> 跳过字幕</label>
+      <label><input id="opt-nosum" type="checkbox"> 跳过AI总结</label>
+    </details>
+    <div class="row">
+      <textarea id="clipboard-text" placeholder="（可选）粘贴文本 → 使用 LLM 做剪贴板分析，如：评论/正文"></textarea>
+      <button id="clipboard-btn">LLM 分析文本</button>
+    </div>
+    <div class="row">
+      <input id="image-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp" />
+      <input id="image-prompt" type="text" placeholder="图片分析提示词（可选）" />
+      <button id="image-btn">LLM 分析图片</button>
+    </div>
+    <div id="crawl-result" class="result hidden"></div>
+  </section>
+
+  <!-- 实时日志 -->
+  <section class="card" id="log-card">
+    <h2>📡 实时日志 <button id="clear-log" class="mini">清空</button></h2>
+    <pre id="log-view"></pre>
+  </section>
+
+  <!-- 任务列表 -->
+  <section class="card">
+    <h2>🗂️ 任务归档 <button id="refresh-btn" class="mini">刷新</button></h2>
+    <div class="task-toolbar">
+      <input id="task-search" type="text" placeholder="搜索标题 / 任务 ID / 链接…" />
+      <select id="task-status">
+        <option value="all">全部状态</option>
+        <option value="finished">已完成</option>
+        <option value="running">运行中</option>
+        <option value="failed">失败</option>
+        <option value="cancelled">已取消</option>
+      </select>
+      <select id="task-type">
+        <option value="all">全部平台</option>
+        <option value="bilibili">B站</option>
+        <option value="youtube">YouTube</option>
+        <option value="collection">合集</option>
+      </select>
+    </div>
+    <div id="task-list" class="task-list"><em>加载中…</em></div>
+  </section>
+</main>
+
+<!-- 首次使用配置引导弹层（分步向导） -->
+<div id="setup-modal" class="modal hidden">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3>🚀 模型配置向导</h3>
+      <button id="setup-close" class="mini">✕</button>
+    </div>
+    <div class="modal-body">
+      <!-- 步骤指示器 -->
+      <div class="wizard-steps">
+        <span class="wizard-step active" data-step="1">① 文本模型</span>
+        <span class="wizard-arrow">→</span>
+        <span class="wizard-step" data-step="2">② 视觉模型</span>
+        <span class="wizard-arrow">→</span>
+        <span class="wizard-step" data-step="3">③ 平台凭据</span>
+        <span class="wizard-arrow">→</span>
+        <span class="wizard-step" data-step="4">④ 测试与保存</span>
+      </div>
+
+      <!-- 步骤1: 文本模型 -->
+      <div class="wizard-panel" data-panel="1">
+        <div class="setup-tip">配置<b>文本处理 LLM</b>（用于评论/弹幕分析、综合报告、知识点提炼等）。需要支持 OpenAI 兼容格式（/v1 接口）。</div>
+        <div class="setup-form">
+          <label>模型提供商（快速填写 API 地址）
+            <select id="setup-provider">
+              <option value="">-- 选择提供商 --</option>
+              <option value="https://api.deepseek.com/v1">DeepSeek</option>
+              <option value="https://api.openai.com/v1">OpenAI</option>
+              <option value="https://open.bigmodel.cn/api/paas/v4">智谱 GLM</option>
+              <option value="https://api.moonshot.cn/v1">Kimi</option>
+              <option value="https://dashscope.aliyuncs.com/compatible-mode/v1">通义千问</option>
+              <option value="https://api.siliconflow.cn/v1">硅基流动</option>
+              <option value="custom">自定义（手动填写地址）</option>
+            </select>
+          </label>
+          <label>API 地址（以 /v1 结尾的 OpenAI 兼容地址）
+            <input id="setup-baseurl" type="text" placeholder="如 https://api.deepseek.com/v1">
+          </label>
+          <label>API Key
+            <input id="setup-apikey" type="password" placeholder="sk-...">
+          </label>
+          <label>模型名称
+            <input id="setup-model" type="text" placeholder="如 deepseek-v4-flash">
+          </label>
+        </div>
+      </div>
+
+      <!-- 步骤2: 视觉模型 -->
+      <div class="wizard-panel hidden" data-panel="2">
+        <div class="setup-tip">配置<b>多模态/视觉模型</b>（用于图片识别、关键帧分析等）。如使用同一提供商，勾选"与文本模型相同"即可。</div>
+        <div class="setup-form">
+          <label class="checkbox-label"><input id="setup-vision-same" type="checkbox" checked> 与文本模型相同（URL / Key 均跟随文本模型）</label>
+          <div id="setup-vision-fields" class="hidden">
+            <label>视觉模型 · API 地址
+              <input id="setup-v-baseurl" type="text" placeholder="留空则跟随文本模型地址">
+            </label>
+            <label>视觉模型 · API Key
+              <input id="setup-v-apikey" type="password" placeholder="留空则跟随文本模型 Key">
+            </label>
+          </div>
+          <label>视觉模型 · 模型名称
+            <input id="setup-v-model" type="text" placeholder="如 glm-5.3-flash、deepseek-vl 等">
+          </label>
+        </div>
+      </div>
+
+      <!-- 步骤3: 平台凭据 -->
+      <div class="wizard-panel hidden" data-panel="3">
+        <div class="setup-tip">B站 Cookie <b>建议提供但不强制</b>。未配置时仍可采集公开视频详情和基础弹幕；配置后可采集完整评论、字幕、AI 总结。YouTube 采集需要 Google API Key（可选）。</div>
+        <div class="setup-form">
+          <label>B站 Cookie：登录 <code>bilibili.com</code> → <b>F12</b> → 网络 → 任意请求 → 复制 <code>Cookie</code> 整段</label>
+          <textarea id="setup-cookie" rows="4" placeholder="buvid3=xxx; SESSDATA=xxx; bili_jct=xxx; ...（整段粘贴）"></textarea>
+          <label>YouTube Data API Key（可选，采集 YouTube 时需要）
+            <input id="setup-yt-key" type="password" placeholder="AIza...">
+          </label>
+        </div>
+      </div>
+
+      <!-- 步骤4: 测试与保存 -->
+      <div class="wizard-panel hidden" data-panel="4">
+        <div class="setup-tip">确认配置无误后，点击测试验证连通性，然后保存。</div>
+        <div class="test-area">
+          <div class="test-row">
+            <span>文本模型连接:</span>
+            <button id="test-text" class="mini">测试</button>
+            <span id="test-text-result" class="test-status"></span>
+          </div>
+          <div class="test-row">
+            <span>视觉模型连接:</span>
+            <button id="test-vision" class="mini">测试</button>
+            <span id="test-vision-result" class="test-status"></span>
+          </div>
+          <div class="test-row">
+            <span>语音转写:</span>
+            <button id="test-asr" class="mini">检测</button>
+            <span id="test-asr-result" class="test-status"></span>
+          </div>
+        </div>
+        <details class="opts" style="margin-top:12px" open>
+          <summary>语音转写（无 B 站官方字幕时）</summary>
+          <div class="setup-form" style="margin-top:8px">
+            <label>选择模型
+              <select id="setup-asr-preset"></select>
+            </label>
+            <div id="setup-asr-hint" class="setup-tip">加载预设中…</div>
+            <div id="setup-asr-download" class="setup-tip hidden"></div>
+            <div id="setup-asr-custom">
+              <label>引擎
+                <select id="setup-asr-engine">
+                  <option value="auto">自动</option>
+                  <option value="whisper-cpp">本地 whisper.cpp</option>
+                  <option value="openai-compat">API（/v1/audio/transcriptions）</option>
+                  <option value="off">关闭</option>
+                </select>
+              </label>
+              <label>转写模型名
+                <input id="setup-asr-model" type="text" placeholder="如 FunAudioLLM/SenseVoiceSmall">
+              </label>
+              <label><input id="setup-asr-follow" type="checkbox" checked> API 地址/Key 跟随文本模型</label>
+              <div id="setup-asr-fields" class="hidden">
+                <label>转写 API 地址
+                  <input id="setup-asr-baseurl" type="text" placeholder="https://api.siliconflow.cn/v1">
+                </label>
+                <label>转写 API Key
+                  <input id="setup-asr-apikey" type="password" placeholder="留空则不改已保存的 Key">
+                </label>
+              </div>
+            </div>
+            <div id="setup-asr-key-only" class="hidden">
+              <label>该云端模型的 API Key（与聊天模型不是同一家时必填）
+                <input id="setup-asr-apikey-cloud" type="password" placeholder="留空则不改已保存的 Key">
+              </label>
+            </div>
+          </div>
+        </details>
+      </div>
+
+      <!-- 导航按钮 -->
+      <div class="wizard-nav">
+        <button id="setup-prev" class="mini hidden">← 上一步</button>
+        <div style="flex:1"></div>
+        <button id="setup-next" class="primary">下一步 →</button>
+        <button id="setup-save" class="primary hidden">保存配置</button>
+        <button id="setup-skip" class="mini">跳过</button>
+      </div>
+      <div id="setup-result" class="result hidden"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 任务详情弹层 -->
+<div id="detail-modal" class="modal hidden">
+  <div class="modal-box">
+    <div class="modal-head">
+      <h3 id="detail-title"></h3>
+      <button id="modal-close" class="mini">✕</button>
+    </div>
+    <div class="tabs">
+      <button class="tab active" data-tab="all">总览</button>
+      <button class="tab" data-tab="detail">详情</button>
+      <button class="tab" data-tab="comments">评论</button>
+      <button class="tab" data-tab="danmaku">弹幕</button>
+      <button class="tab" data-tab="subtitles">字幕</button>
+      <button class="tab" data-tab="summary">AI总结</button>
+      <button class="tab" data-tab="words">词频</button>
+      <button class="tab" data-tab="analyze">LLM分析</button>
+    </div>
+    <div class="export-bar">
+      <span>导出:</span>
+      <button class="mini" data-export="comments" data-format="csv">评论 CSV</button>
+      <button class="mini" data-export="comments" data-format="xls">评论 Excel</button>
+      <button class="mini" data-export="danmaku" data-format="csv">弹幕 CSV</button>
+      <button class="mini" data-export="danmaku" data-format="xls">弹幕 Excel</button>
+    </div>
+    <div id="detail-body" class="modal-body"></div>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>

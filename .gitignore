@@ -1,0 +1,21 @@
+# ---- 机密与本地配置：绝不入库 ----
+config.json
+config.json.bak
+
+# ---- 运行数据 ----
+data/
+logs/
+*.log
+
+# ---- 本地工具与大文件（whisper.cpp 二进制、模型、FunASR 虚拟环境等）----
+# 保留 tools/funasr-server.py 与 tools/启动FunASR.bat 两个脚本
+tools/*
+!tools/funasr-server.py
+!tools/启动FunASR.bat
+
+# ---- Node / 系统 ----
+node_modules/
+.DS_Store
+Thumbs.db
+# ---- 本地会话配置 ----
+.claude/

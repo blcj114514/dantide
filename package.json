@@ -1,0 +1,14 @@
+{
+  "name": "smr",
+  "version": "0.1.0",
+  "description": "Social Media Research — 本地优先的社交媒体研究助手（零依赖）",
+  "type": "module",
+  "main": "src/main.js",
+  "engines": { "node": ">=20.6.0" },
+  "scripts": {
+    "start": "node src/main.js",
+    "crawl": "node src/main.js --crawl",
+    "analyze": "node src/main.js --analyze"
+  },
+  "license": "MIT"
+}

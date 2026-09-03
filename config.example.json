@@ -1,0 +1,65 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 39010,
+    "localToken": ""
+  },
+  "cookies": {
+    "bilibili": "",
+    "douyin": "",
+    "xhs": "",
+    "zhihu": "",
+    "youtube": ""
+  },
+  "llm": {
+    "baseUrl": "",
+    "apiKey": "",
+    "model": "",
+    "reasoningEffort": "low",
+    "vision": {
+      "baseUrl": "",
+      "apiKey": "",
+      "model": ""
+    },
+    "visionModel": "",
+    "visionEnabled": true,
+    "maxTokens": 2000
+  },
+  "youtube": {
+    "apiKey": "",
+    "ytdlpPath": ""
+  },
+  "asr": {
+    "enabled": true,
+    "preset": "auto",
+    "engine": "auto",
+    "language": "zh",
+    "followLlm": true,
+    "model": "",
+    "baseUrl": "",
+    "apiKey": "",
+    "whisperBin": "",
+    "whisperModel": "",
+    "chunkSeconds": 600
+  },
+  "crawl": {
+    "ffmpegPath": "",
+    "bilibili": {
+      "danmakuCount": 2000,
+      "commentCount": 1000,
+      "subCommentCount": 20,
+      "baseTargetCount": 1500,
+      "fetchVideo": true,
+      "fetchAudio": true,
+      "preferHighQuality": false,
+      "quality": "1080p"
+    },
+    "requestDelay": {
+      "base": 300,
+      "random": 400
+    }
+  },
+  "web": {
+    "openBrowser": true
+  }
+}
