@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// main.js — SMR 入口
+// main.js — DanTide（弹潮）入口
 //   node src/main.js              启动本地服务（默认 http://127.0.0.1:39010）
 //   node src/main.js --crawl <url|BV> [--max-danmaku N] [--no-comments] ...
 //   node src/main.js --analyze <taskId> [comments|danmaku|all]
@@ -263,7 +263,7 @@ async function main() {
   await startServer(port, host);
   const url = `http://${host}:${port}`;
   logger.info('==================================================');
-  logger.info('SMR 已就绪', { url });
+  logger.info('DanTide 已就绪 🌊', { url });
   logger.info(`Web UI: ${url}`);
   logger.info(`MCP: ${url}/mcp?token=<config.json server.localToken>`);
   logger.info('本机访问令牌已写入 config.json 的 server.localToken（页面自动携带）');

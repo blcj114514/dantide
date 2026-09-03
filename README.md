@@ -1,6 +1,8 @@
-# 📊 SMR Research Assistant
+# 🌊 DanTide · 弹潮
 
-**本地优先的社交媒体研究助手** —— 粘贴一个 B 站（或 YouTube）链接，自动采集视频详情、评论、弹幕、字幕、音视频文件，并用 AI 生成结构化分析报告。
+**本地优先的社交媒体研究助手** —— 每一条弹幕都是一朵浪，DanTide 帮你读出潮水下面的暗流。
+
+粘贴一个 B 站（或 YouTube）链接，自动采集视频详情、评论、弹幕、字幕、音视频文件，并用 AI 生成结构化分析报告。
 
 > 零 npm 依赖 · 纯 Node.js（≥ 20）· 数据全部保存在本机
 
@@ -20,7 +22,7 @@
 
 ```bash
 # Windows: 双击 install.bat（自动检测 Node、建桌面快捷方式并启动）
-# 或手动:
+# 或手动（目录名不影响运行，本地目录仍可为 SMR-Research-Assistant）:
 cd SMR-Research-Assistant
 node src/main.js
 # 打开 http://127.0.0.1:39010

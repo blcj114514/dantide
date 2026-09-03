@@ -1,10 +1,10 @@
 @echo off
-title SMR Research Assistant - Setup
+title DanTide - Setup
 setlocal EnableDelayedExpansion
 cd /d "%~dp0"
 
 echo ============================================================
-echo    SMR Research Assistant - Environment Check and Install
+echo    DanTide - Environment Check and Install
 echo ============================================================
 echo.
 
@@ -69,15 +69,15 @@ powershell -NoProfile -Command ^
   "$vbs = 'Set ws = CreateObject(\"Wscript.Shell\")' + \"`r`n\" + 'ws.CurrentDirectory = \"' + $dir + '\"' + \"`r`n\" + 'ws.Run \"\"\"' + $nodePath + '\"\" \"\"' + $dir + '\src\main.js\"\"\", 0, False';" ^
   "[System.IO.File]::WriteAllText((Join-Path $dir 'start-silent.vbs'), $vbs, [System.Text.Encoding]::Unicode);" ^
   "$ws = New-Object -ComObject WScript.Shell;" ^
-  "$lnk = $ws.CreateShortcut([Environment]::GetFolderPath('Desktop') + '\SMR Research Assistant.lnk');" ^
+  "$lnk = $ws.CreateShortcut([Environment]::GetFolderPath('Desktop') + '\DanTide.lnk');" ^
   "$lnk.TargetPath = (Join-Path $env:WINDIR 'System32\wscript.exe');" ^
   "$lnk.Arguments = '\"' + (Join-Path $dir 'start-silent.vbs') + '\"';" ^
   "$lnk.WorkingDirectory = $dir;" ^
-  "$lnk.Description = 'SMR Research Assistant - local service';" ^
+  "$lnk.Description = 'DanTide - local service';" ^
   "$lnk.Save();" ^
   "Write-Output 'desktop-ok'"
 if %errorlevel%==0 (
-  echo   Desktop shortcut created: SMR Research Assistant
+  echo   Desktop shortcut created: DanTide
 ) else (
   echo   [WARN] Shortcut creation failed. You can run install.bat again.
 )
@@ -92,7 +92,7 @@ echo    - Service is running in the background
 echo    - Browser will open http://127.0.0.1:39010
 echo    - First visit: fill in TEXT model + VISION model (and
 echo      optional Bilibili Cookie) in the setup window
-echo    - Later: double-click "SMR Research Assistant" on desktop
+echo    - Later: double-click "DanTide" on desktop
 echo ============================================================
 echo.
 timeout /t 8 >nul
