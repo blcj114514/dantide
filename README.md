@@ -2,7 +2,7 @@
 
 **本地优先的社交媒体研究助手** —— 每一条弹幕都是一朵浪，DanTide 帮你读出潮水下面的暗流。
 
-粘贴一个 B 站（或 YouTube）链接，自动采集视频详情、评论、弹幕、字幕、音视频文件，并用 AI 生成结构化分析报告。
+粘贴一个 B 站（或 YouTube）链接，自动采集视频详情、评论、弹幕、字幕、音视频文件，并用 AI 生成结构化分析报告；v0.2.0 新增 **AI 视频内容解析**（Gemini 原生视频理解优先，本地抽帧+视觉模型兜底）。
 
 > 零 npm 依赖 · 纯 Node.js（≥ 20）· 数据全部保存在本机
 
@@ -47,7 +47,7 @@ cp config.example.json config.json   # 或直接用向导配置，运行时自�
 | 搜索页链接 / 关键词 | 搜索结果批量采集 |
 | 热门 / 每周必看 / 推荐 / 历史 | 批量采集 |
 | 合集链接 | 按板块 + 偏移 + 批量数量分批；已采自动跳过 |
-| YouTube 视频 / 播放列表 / 频道 / 11 位 ID | Data API 采元数据+评论；装 yt-dlp 可下视频与字幕正文 |
+| YouTube 视频 / 播放列表 / 频道 / 11 位 ID | **双路线**：有 Google API key 走 Data API，无 key 自动退化为 yt-dlp（元数据+评论+字幕轨）；装 yt-dlp 可下视频/音频与字幕正文 |
 
 ## 命令行速查
 
@@ -71,13 +71,23 @@ node src/main.js --list / --status / --delete <任务Id>
 | `cookies.bilibili` | B 站 Cookie（采完整评论/字幕/AI 总结需要） |
 | `asr.*` | 语音转写引擎（FunASR / whisper.cpp / 云端 API） |
 | `crawl.ffmpegPath` | ffmpeg 路径（合并 mp4、提取音轨） |
-| `youtube.apiKey` | YouTube Data API |
+| `youtube.apiKey` | YouTube Data API（评论/元数据路线；无 key 且装有 yt-dlp 时自动退化） |
+| `llm.videoAnalyzer.gemini.apiKey` | Gemini API key（AI 视频内容解析用，免费额度即可；[aistudio.google.com](https://aistudio.google.com/) 申请） |
 
 全部字段见 [config.example.json](config.example.json)；环境变量注入方式见手册 6.3。
 
 ## MCP 服务器
 
-启动后提供 `http://127.0.0.1:39010/mcp`，带 11 个工具：`crawl_bilibili`（及 search/uploader/popular/weekly/recommend 变体）、`crawl_youtube`、`list_archives`、`get_task_data`、`analyze_task`、`transcribe_task`。鉴权用本机令牌（`Authorization: Bearer <server.localToken>` 或 `?token=`）。
+启动后提供 `http://127.0.0.1:39010/mcp`，带 12 个工具：`crawl_bilibili`（及 search/uploader/popular/weekly/recommend 变体）、`crawl_youtube`、`list_archives`、`get_task_data`、`analyze_task`、`transcribe_task`、`analyze_video`。鉴权用本机令牌（`Authorization: Bearer <server.localToken>` 或 `?token=`）。
+
+## AI 视频内容解析（v0.2.0）
+
+对已采集的任务（B 站或 YouTube）一键生成中文《视频内容解析报告》：内容概述、时间线章节（含时间点）、画面与视觉要点、讲解观点、风格受众、评论观察、改进建议。
+
+- **双路线**：配置了 Gemini API key 时优先走 Gemini 原生视频理解（YouTube 链接可直读，本地视频 ≤2GB 自动上传）；未配置或失败时自动退化为本地 ffmpeg 抽帧 + 视觉模型。
+- **触发**：Web UI「字幕」页的 🎬 按钮 / CLI `--analyze-video <taskId>` / MCP `analyze_video`。
+- **产出**：任务目录下 `video-analysis.md` + 状态文件 `video-analysis.status.json`。
+- 帧间隔/帧数/分辨率可在 `llm.videoAnalyzer.frames` 调整。
 
 ## 可选外部工具
 

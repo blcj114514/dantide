@@ -152,3 +152,96 @@ export async function downloadYoutubeMedia(videoId, dir, {
 
   return { skipped: false, video, audio, merged: !!video, subtitles };
 }
+
+function spawnYtDlpOut(bin, args) {
+  return new Promise((resolve, reject) => {
+    const p = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+    let out = '';
+    let err = '';
+    p.stdout.on('data', (c) => { out += c; });
+    p.stderr.on('data', (c) => { err += c; });
+    p.on('error', reject);
+    p.on('close', (code) => {
+      if (code !== 0) {
+        reject(new Error(`yt-dlp 退出码 ${code}: ${err.slice(-300)}`));
+        return;
+      }
+      try { resolve(JSON.parse(out)); } catch (e) { reject(new Error('yt-dlp JSON 解析失败: ' + e.message)); }
+    });
+  });
+}
+
+/**
+ * yt-dlp 元数据 JSON 直出（--dump-single-json），可选抓取评论。
+ * 未找到 yt-dlp 时返回 null（调用方决定回退策略）。
+ */
+export async function ytdlpDumpJson(videoId, { comments = false, maxComments = 200 } = {}) {
+  const bin = findYtDlp();
+  if (!bin) return null;
+  const url = `https://www.youtube.com/watch?v=${videoId}`;
+  const args = ['--dump-single-json', '--no-playlist', '--no-warnings'];
+  if (comments) {
+    args.push('--write-comments');
+    args.push('--extractor-args', `youtube:max_comments=${Math.max(10, Number(maxComments) || 200)},0;comment_sort=top`);
+  }
+  args.push(url);
+  try {
+    return await spawnYtDlpOut(bin, args);
+  } catch (e) {
+    logger.warn('yt-dlp 元数据获取失败', { videoId, error: String(e.message || e).slice(-300) });
+    return null;
+  }
+}
+
+/** dump JSON → 与 Data API 同构的视频信息（无 key 时回退用） */
+export function ytdlpInfoFromDump(dump) {
+  const d = dump || {};
+  const dur = Number(d.duration);
+  const iso = Number.isFinite(dur) && dur > 0
+    ? `PT${Math.floor(dur / 3600)}H${Math.floor((dur % 3600) / 60)}M${Math.round(dur % 60)}S`
+    : '';
+  return {
+    id: d.id || '',
+    title: d.title || '',
+    description: d.description || '',
+    channel: d.uploader || d.channel || '',
+    channelId: d.uploader_id || d.channel_id || '',
+    publishedAt: d.upload_date
+      ? `${d.upload_date.slice(0, 4)}-${d.upload_date.slice(4, 6)}-${d.upload_date.slice(6, 8)}`
+      : '',
+    duration: iso,
+    durationSeconds: Number.isFinite(dur) ? dur : undefined,
+    viewCount: d.view_count, likeCount: d.like_count,
+    commentCount: d.comment_count,
+    thumbnails: Array.isArray(d.thumbnails) && d.thumbnails.length
+      ? { source: d.thumbnails[d.thumbnails.length - 1] } : {},
+    source: 'yt-dlp',
+  };
+}
+
+/** dump JSON → 与 Data API 同构的评论列表（按点赞降序，截断到 cap） */
+export function ytdlpCommentsFromDump(dump, cap = 200) {
+  const list = Array.isArray(dump?.comments) ? dump.comments.slice() : [];
+  list.sort((a, b) => (Number(b.like_count) || 0) - (Number(a.like_count) || 0));
+  return list.slice(0, Math.max(1, cap)).map((c) => ({
+    id: c.id || '',
+    user: c.author || '',
+    like: Number(c.like_count) || 0,
+    content: c.text || '',
+    publishedAt: c.timestamp ? new Date(c.timestamp * 1000).toISOString() : '',
+    parent: c.parent && c.parent !== 'root' ? c.parent : undefined,
+  })).filter((c) => c.content);
+}
+
+/** dump JSON → 字幕轨列表（官方全部收录；自动字幕只保留中英避免噪音） */
+export function ytdlpCaptionTracksFromDump(dump) {
+  const d = dump || {};
+  const tracks = [];
+  for (const lang of Object.keys(d.subtitles || {})) {
+    tracks.push({ id: 'sub:' + lang, language: lang, name: lang, trackKind: 'official' });
+  }
+  for (const lang of Object.keys(d.automatic_captions || {})) {
+    if (/^(zh|en)/i.test(lang)) tracks.push({ id: 'auto:' + lang, language: lang, name: lang, trackKind: 'asr' });
+  }
+  return tracks;
+}

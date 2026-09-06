@@ -223,6 +223,17 @@ async function runCliTranscribe() {
   console.log(JSON.stringify(result, null, 2));
 }
 
+async function runCliAnalyzeVideo() {
+  const { analyzeTaskVideo } = await import('./video-analysis.js');
+  const taskId = args[args.indexOf('--analyze-video') + 1];
+  const prefer = getArg('--prefer', 'auto');
+  if (!taskId) { console.error('用法: node src/main.js --analyze-video <taskId> [--prefer auto|gemini|frames]'); process.exit(1); }
+  if (!['auto', 'gemini', 'frames'].includes(prefer)) { console.error('prefer 必须为 auto/gemini/frames'); process.exit(1); }
+  console.log(`开始视频解析（路线 ${prefer}）…`);
+  const r = await analyzeTaskVideo(taskId, { prefer });
+  console.log(`✓ 解析完成（路线 ${r.route} · 模型 ${r.model}）: ${r.file}`);
+}
+
 async function runCliList() {
   const { listTasks } = await import('./task.js');
   const tasks = listTasks();
@@ -255,6 +266,7 @@ async function main() {
   if (hasFlag('--transcribe')) return runCliTranscribe();
   if (hasFlag('--vision')) return runCliVision();
   if (hasFlag('--delete')) return runCliDelete();
+  if (hasFlag('--analyze-video')) return runCliAnalyzeVideo();
   if (hasFlag('--list')) return runCliList();
 
   // 服务模式

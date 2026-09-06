@@ -23,7 +23,18 @@
     },
     "visionModel": "",
     "visionEnabled": true,
-    "maxTokens": 2000
+    "maxTokens": 2000,
+    "videoAnalyzer": {
+      "gemini": {
+        "apiKey": "",
+        "model": "gemini-2.5-flash"
+      },
+      "frames": {
+        "intervalSeconds": 8,
+        "maxFrames": 20,
+        "maxWidth": 960
+      }
+    }
   },
   "youtube": {
     "apiKey": "",
@@ -57,6 +68,11 @@
     "requestDelay": {
       "base": 300,
       "random": 400
+    },
+    "youtube": {
+      "commentCount": 200,
+      "fetchVideo": true,
+      "fetchAudio": true
     }
   },
   "web": {

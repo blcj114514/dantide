@@ -474,6 +474,26 @@ export function createServer() {
           logger.info('模型连接测试', { type, ok: result.ok, model: result.model, latencyMs: result.latencyMs });
           return json(res, result.ok ? 200 : 400, result);
         }
+        // POST /api/analyze-video — AI 视频内容解析（Gemini 优先，抽帧兜底）{task_id, prefer?}
+        if (p === '/api/analyze-video' && req.method === 'POST') {
+          const body = JSON.parse((await readBody(req)) || '{}');
+          const id = safeTaskId(String(body.task_id || ''));
+          if (!id) return json(res, 400, { error: '需要 task_id' });
+          if (!readTask(id)) return json(res, 404, { error: '任务不存在' });
+          const prefer = ['auto', 'gemini', 'frames'].includes(body.prefer) ? body.prefer : 'auto';
+          logger.info('收到视频解析请求（后台执行）', { taskId: id, prefer });
+          import('./video-analysis.js').then((m) => m.analyzeTaskVideo(id, { prefer }))
+            .then((r) => logger.info('视频解析完成', { taskId: id, route: r.route, model: r.model }))
+            .catch((e) => logger.error('视频解析失败', { taskId: id, error: e.message }));
+          return json(res, 202, { accepted: true, message: '视频解析已开始（Gemini 优先、抽帧兜底），结果将写入任务目录 video-analysis.md' });
+        }
+        // GET /api/analyze-video?task_id= — 查询解析状态与报告内容
+        if (p === '/api/analyze-video' && req.method === 'GET') {
+          const id = safeTaskId(String(url.searchParams.get('task_id') || ''));
+          if (!id) return json(res, 400, { error: '需要 task_id' });
+          const { getVideoAnalysisStatus } = await import('./video-analysis.js');
+          return json(res, 200, getVideoAnalysisStatus(id));
+        }
         // POST /api/transcribe — 对已有任务补语音字幕 {task_id, force?}
         if (p === '/api/transcribe' && req.method === 'POST') {
           const body = JSON.parse((await readBody(req)) || '{}');

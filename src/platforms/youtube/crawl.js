@@ -14,14 +14,30 @@ import {
   getVideoInfo, getCommentThreads, getCaptionTracks, parseYoutubeInput,
   getPlaylistItems, getChannelUploads,
 } from './api.js';
-import { downloadYoutubeMedia, findYtDlp } from './download.js';
+import {
+  downloadYoutubeMedia, findYtDlp,
+  ytdlpDumpJson, ytdlpInfoFromDump, ytdlpCommentsFromDump, ytdlpCaptionTracksFromDump,
+} from './download.js';
 
 const writeJson = (file, data) => fs.writeFileSync(file, JSON.stringify(data, null, 2), 'utf8');
 
 export async function crawlYoutubeVideo(videoId, opts = {}) {
   logger.info('开始采集 YouTube 视频', { videoId });
 
-  const info = await getVideoInfo(videoId);
+  // 双路线：有 Google API key 走 Data API；没有则自动退化为 yt-dlp（元数据/评论/字幕轨）
+  const hasApiKey = !!loadConfig().youtube.apiKey;
+  let info = null;
+  let dump = null;
+  if (hasApiKey) {
+    info = await getVideoInfo(videoId);
+  } else {
+    logger.info('未配置 youtube.apiKey，走 yt-dlp 元数据/评论回退', { videoId });
+    dump = await ytdlpDumpJson(videoId, { comments: true, maxComments: opts.commentCount ?? 200 });
+    if (!dump) {
+      throw new Error('未配置 youtube.apiKey 且未找到 yt-dlp：请申请免费 Google API key 填入 config.json → youtube.apiKey，或下载 yt-dlp.exe 放到 tools/ 目录');
+    }
+    info = ytdlpInfoFromDump(dump);
+  }
   const taskId = `${sanitizeName(info.title)}-${videoId}`;
   const skip = shouldSkipTask(taskId);
   if (skip.shouldSkip) {
@@ -45,14 +61,23 @@ export async function crawlYoutubeVideo(videoId, opts = {}) {
     writeJson(path.join(dir, 'youtube_detail.json'), info);
 
     throwIfAborted(signal);
-    const comments = await getCommentThreads(videoId, {
-      maxResults: opts.commentCount ?? 100,
-      maxReplies: opts.subCommentCount ?? 5,
-    });
+    let comments = [];
+    if (hasApiKey) {
+      comments = await getCommentThreads(videoId, {
+        maxResults: opts.commentCount ?? 100,
+        maxReplies: opts.subCommentCount ?? 5,
+      });
+      stats.commentSource = 'data-api';
+    } else {
+      comments = ytdlpCommentsFromDump(dump, opts.commentCount ?? 200);
+      stats.commentSource = 'yt-dlp';
+    }
     writeJson(path.join(dir, 'youtube_comments.json'), comments);
     stats.comments = comments.length;
 
-    const tracks = await getCaptionTracks(videoId);
+    const tracks = hasApiKey
+      ? await getCaptionTracks(videoId)
+      : ytdlpCaptionTracksFromDump(dump);
     if (tracks.length) {
       writeJson(path.join(dir, 'youtube_captions.json'), tracks);
       stats.subtitles = tracks.length;

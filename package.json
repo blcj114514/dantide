@@ -1,10 +1,12 @@
 {
   "name": "dantide",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "DanTide 弹潮 — 本地优先的社交媒体研究助手（零依赖）",
   "type": "module",
   "main": "src/main.js",
-  "engines": { "node": ">=20.6.0" },
+  "engines": {
+    "node": ">=20.6.0"
+  },
   "scripts": {
     "start": "node src/main.js",
     "crawl": "node src/main.js --crawl",

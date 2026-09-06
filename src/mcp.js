@@ -21,7 +21,8 @@ export const MCP_TOOLS = [
   { name: 'crawl_bilibili_popular', description: '触发 B 站热门视频搜集。', inputSchema: { type: 'object', properties: {} } },
   { name: 'crawl_bilibili_weekly', description: '搜集 B 站每周必看内容。可指定期数。', inputSchema: { type: 'object', properties: { number: { type: 'number' } } } },
   { name: 'crawl_bilibili_recommend', description: '触发 B 站首页推荐流搜集（需登录 cookies）。', inputSchema: { type: 'object', properties: {} } },
-  { name: 'crawl_youtube', description: '搜集 YouTube 视频信息与评论（需配置 Google API key）。', inputSchema: { type: 'object', properties: { url: { type: 'string', description: 'YouTube 视频 URL 或 ID' } }, required: ['url'] } },
+  { name: 'crawl_youtube', description: '搜集 YouTube 视频信息、评论、字幕与媒体。双路线：有 Google API key 走 Data API，否则自动退化为 yt-dlp（需 tools/yt-dlp.exe）。', inputSchema: { type: 'object', properties: { url: { type: 'string', description: 'YouTube 视频 URL 或 ID' } }, required: ['url'] } },
+  { name: 'analyze_video', description: 'AI 视频内容解析：Gemini 原生视频优先（可直接读 YouTube 链接），无 key 时自动退化为本地抽帧+视觉模型。产出中文《视频内容解析报告》写入任务目录 video-analysis.md。', inputSchema: { type: 'object', properties: { task_id: { type: 'string' }, prefer: { type: 'string', enum: ['auto', 'gemini', 'frames'], description: '解析路线，默认 auto' } }, required: ['task_id'] } },
   { name: 'list_archives', description: '列出归档目录中的采集任务。', inputSchema: { type: 'object', properties: { limit: { type: 'number' } } } },
   { name: 'get_task_data', description: '读取指定任务目录中的数据（comments/danmaku/subtitles/detail/all/summary）。', inputSchema: { type: 'object', properties: { task_id: { type: 'string' }, type: { type: 'string', enum: ['comments', 'danmaku', 'subtitles', 'detail', 'all', 'summary'] } }, required: ['task_id'] } },
   { name: 'analyze_task', description: '用 LLM 分析任务数据（评论/弹幕，或 all 综合视频+弹幕+评论，需已配置 LLM）。', inputSchema: { type: 'object', properties: { task_id: { type: 'string' }, type: { type: 'string', enum: ['comments', 'danmaku', 'all'] } }, required: ['task_id'] } },
@@ -92,6 +93,17 @@ export async function handleToolCall(name, args = {}) {
       }
       return { content: [{ type: 'text', text: JSON.stringify({ task_id: taskId, data }, null, 2).slice(0, 50000) }] };
     }
+    case 'analyze_video': {
+      const taskId = safeTaskId(args.task_id);
+      if (!taskId) throw new Error('非法 task_id');
+      const t = readTask(taskId);
+      if (!t) throw new Error(`任务不存在: ${taskId}`);
+      const prefer = ['auto', 'gemini', 'frames'].includes(args.prefer) ? args.prefer : 'auto';
+      const { analyzeTaskVideo, getVideoAnalysisStatus } = await import('./video-analysis.js');
+      await analyzeTaskVideo(taskId, { prefer });
+      const st = getVideoAnalysisStatus(taskId);
+      return { content: [{ type: 'text', text: (st.markdown || '解析完成但报告为空') + `\n\n（路线 ${st.route || '?'} · 模型 ${st.model || '?'}）` }] };
+    }
     case 'analyze_task': {
       const taskId = safeTaskId(args.task_id);
       if (!taskId) throw new Error('非法 task_id');
@@ -138,7 +150,7 @@ export async function handleMcpMessage(msg) {
   const { id, method, params } = msg;
   try {
     if (method === 'initialize') {
-      return { jsonrpc: '2.0', id, result: { protocolVersion: '2025-03-26', capabilities: { tools: {} }, serverInfo: { name: 'smr-mcp', version: '0.1.0' } } };
+      return { jsonrpc: '2.0', id, result: { protocolVersion: '2025-03-26', capabilities: { tools: {} }, serverInfo: { name: 'smr-mcp', version: '0.2.0' } } };
     }
     if (method === 'notifications/initialized') return null;
     if (method === 'ping') return { jsonrpc: '2.0', id, result: {} };

@@ -726,7 +726,10 @@ async function renderSubtitles(body) {
       <button id="asr-run" class="mini">语音转写补字幕</button>
       <label class="mini"><input id="asr-force" type="checkbox"> 覆盖已有字幕</label>
       <span id="asr-hint" class="cfg"></span>
+      <button id="va-run" class="mini">🎬 AI 视频解析</button>
+      <span id="va-hint" class="cfg"></span>
     </div>
+    <div id="va-body"></div>
     <div id="sub-body"><div class="empty">加载中…</div></div>`;
   const hint = $('#asr-hint');
   const box = $('#sub-body');
@@ -746,6 +749,36 @@ async function renderSubtitles(body) {
       if (!r.ok) throw new Error(d.error || ('HTTP ' + r.status));
       hint.textContent = d.message || '已入队，见实时日志';
     } catch (e) { hint.textContent = '失败: ' + e.message; }
+  };
+  $('#va-run').onclick = async () => {
+    const vaHint = $('#va-hint');
+    const vaBody = $('#va-body');
+    vaHint.textContent = '已提交…';
+    vaBody.innerHTML = '';
+    try {
+      const r = await apiFetch('/api/analyze-video', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ task_id: taskId }),
+      });
+      const d0 = await r.json();
+      if (!r.ok) throw new Error(d0.error || ('HTTP ' + r.status));
+      vaHint.textContent = d0.message || '解析已开始…';
+      for (let i = 0; i < 120; i++) {
+        await new Promise((res2) => setTimeout(res2, 5000));
+        const sr = await apiFetch('/api/analyze-video?task_id=' + encodeURIComponent(taskId));
+        const sd = await sr.json();
+        if (!sr.ok) throw new Error(sd.error || ('HTTP ' + sr.status));
+        if (sd.status === 'running') { vaHint.textContent = '解析中… ' + (sd.stage || sd.route || ''); continue; }
+        if (sd.status === 'done') {
+          vaHint.textContent = '解析完成 · 路线 ' + (sd.route || '?') + ' · 模型 ' + (sd.model || '?') + ' · 已写入 video-analysis.md';
+          vaBody.innerHTML = '<div class="empty" style="text-align:left;padding:0 0 10px">《视频内容解析报告》</div><pre style="white-space:pre-wrap;text-align:left">' + esc(sd.markdown || '') + '</pre>';
+          return;
+        }
+        if (sd.status === 'error') throw new Error(sd.error || '解析失败');
+        if (sd.status === 'none') { vaHint.textContent = '后台启动中…'; continue; }
+      }
+      vaHint.textContent = '轮询超时（解析仍在后台进行，稍后刷新此页查看）';
+    } catch (e) { vaHint.textContent = '失败: ' + e.message; }
   };
   const showSubs = async (file) => {
     const r = await loadTaskFile(file);
