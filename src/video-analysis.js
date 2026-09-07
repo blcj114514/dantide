@@ -29,7 +29,7 @@ function resolveAnalyzer(cfg) {
   };
 }
 
-function findVideoFile(dir) {
+export function findVideoFile(dir) {
   const preferred = ['current.mp4', 'current.mkv', 'current.webm', 'current.avi'];
   for (const name of preferred) {
     const p = path.join(dir, name);
@@ -41,7 +41,7 @@ function findVideoFile(dir) {
   return '';
 }
 
-function findYoutubeUrl(taskId) {
+export function findYoutubeUrl(taskId) {
   try {
     const all = readTaskJson(taskId, 'youtube_all.json');
     if (all && all.url) return all.url;
@@ -160,6 +160,60 @@ async function geminiGenerate({ apiKey, model, parts }) {
   return text;
 }
 
+/** 抽帧：ffmpeg 按 interval 抽帧到临时目录（不缩放不压缩，由调用方决定后续处理） */
+async function extractFrames(videoFile, { intervalSeconds, maxFrames, maxWidth }) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-frames-'));
+  const ff = loadConfig().crawl?.ffmpegPath || 'ffmpeg';
+  await new Promise((resolve, reject) => {
+    const p = spawn(ff, ['-y', '-i', videoFile, '-vf', `fps=1/${intervalSeconds},scale='min(${maxWidth},iw)':-2`, '-frames:v', String(maxFrames), path.join(tmp, 'f%03d.jpg')], { windowsHide: true });
+    let err = '';
+    p.stderr.on('data', (c) => { err += c; });
+    p.on('error', reject);
+    p.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg 退出码 ${code}: ${err.slice(-200)}`))));
+  });
+  const frames = fs.readdirSync(tmp).filter((f) => f.endsWith('.jpg')).sort().slice(0, maxFrames).map((f) => path.join(tmp, f));
+  if (!frames.length) { try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { } throw new Error('抽帧失败：未生成任何帧'); }
+  return { tmp, frames };
+}
+
+/**
+ * GLM 逐批细读路线：把视频抽帧后按批次（每批 framesPerBatch 帧）喂给视觉模型，
+ * 每批产出一段观察，最后把全部观察合并给文本模型写成完整报告。
+ * 每批独立请求（单批 ≤10 帧、总 base64 控制在 ~4MB 内，实测 Ollama 云端可通过）。
+ */
+async function glmFramesAnalyze({ videoFile, prompt, intervalSeconds, maxFrames, maxWidth, framesPerBatch = 10 }) {
+  const { tmp, frames } = await extractFrames(videoFile, { intervalSeconds, maxFrames, maxWidth });
+  try {
+    const observations = [];
+    const batches = Math.ceil(frames.length / framesPerBatch);
+    for (let b = 0; b < batches; b++) {
+      const batch = frames.slice(b * framesPerBatch, (b + 1) * framesPerBatch);
+      const startSec = (b * framesPerBatch) * intervalSeconds;
+      const endSec = startSec + batch.length * intervalSeconds;
+      const imgs = batch.map((f) => 'data:image/jpeg;base64,' + fs.readFileSync(f).toString('base64'));
+      const batchPrompt = [
+        `这些帧来自同一段视频，按时间顺序排列，对应视频的第 ${startSec} 秒到第 ${endSec} 秒（帧间隔 ${intervalSeconds} 秒）。`,
+        '请客观记录每一帧的画面内容（场景/人物/物体/文字/动作），按帧编号输出要点。禁止编造，看不清写"无法辨认"。',
+      ].join('\n');
+      logger.info('GLM 逐批细读', { batch: `${b + 1}/${batches}`, frames: batch.length, sizeMB: (imgs.reduce((s, u) => s + u.length, 0) / 1048576).toFixed(2) });
+      const obs = await chat({ prompt: batchPrompt, imageUrls: imgs, maxTokens: 2500, provider: 'vision' });
+      observations.push(`【批次 ${b + 1}/${batches}（第 ${startSec}–${endSec} 秒）】\n${obs}`);
+    }
+    // 合并成报告
+    const mergePrompt = [
+      '你从同一段视频中按时间顺序抽取了多批画面，并由视觉模型产出了逐批观察记录。',
+      '请把以下观察记录综合成一份连贯的《视频内容解析报告》（中文 Markdown），包含：一句话总结、内容概述、时间线章节（标注时间点）、画面与视觉要点、讲解与观点要点、风格与受众、评论观察（若有）、质量与改进建议。',
+      '只依据观察记录下结论，禁止编造；总长 800–1500 字。',
+      '',
+      '【原始任务说明】\n' + prompt.slice(0, 3000),
+      '【逐批观察记录】\n' + observations.join('\n\n').slice(0, 60000),
+    ].join('\n\n');
+    return await chat({ prompt: mergePrompt, maxTokens: 6000 });
+  } finally {
+    try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* ignore */ }
+  }
+}
+
 /** 抽帧兜底：ffmpeg 按 interval 抽帧（缩放到 maxWidth），拼 base64 喂视觉模型 */
 async function framesAnalyze({ videoFile, prompt, intervalSeconds, maxFrames, maxWidth }) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-frames-'));
@@ -254,10 +308,20 @@ export async function analyzeTaskVideo(taskId, { prefer = 'auto' } = {}) {
   }
 
   if (!report && videoFile) {
-    route = 'frames';
+    // 第三条路线：GLM 逐批细读（真视频帧，走 Ollama/现有 vision 额度）
+    // 原单次抽帧（frames）保留为最后兜底（帧数受单请求限制，细读质量更高）
+    route = 'glm-frames';
     model = 'vision:' + ((cfg.llm.vision && cfg.llm.vision.model) || cfg.llm.model || 'default');
-    writeStatus({ status: 'running', stage: 'frames', route, model });
-    report = await framesAnalyze({ videoFile, prompt, intervalSeconds: an.intervalSeconds, maxFrames: an.maxFrames, maxWidth: an.maxWidth });
+    writeStatus({ status: 'running', stage: 'glm-frames', route, model });
+    try {
+      report = await glmFramesAnalyze({ videoFile, prompt, intervalSeconds: an.intervalSeconds, maxFrames: Math.max(an.maxFrames, 30), maxWidth: an.maxWidth });
+    } catch (e) {
+      errors.push('glm-frames: ' + e.message);
+      logger.warn('GLM 逐批细读失败，退化单次抽帧', { error: e.message });
+      route = 'frames';
+      writeStatus({ status: 'running', stage: 'frames', route, model });
+      report = await framesAnalyze({ videoFile, prompt, intervalSeconds: an.intervalSeconds, maxFrames: an.maxFrames, maxWidth: an.maxWidth });
+    }
   }
 
   if (!report) {

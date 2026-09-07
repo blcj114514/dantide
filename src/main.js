@@ -224,11 +224,18 @@ async function runCliTranscribe() {
 }
 
 async function runCliAnalyzeVideo() {
-  const { analyzeTaskVideo } = await import('./video-analysis.js');
   const taskId = args[args.indexOf('--analyze-video') + 1];
   const prefer = getArg('--prefer', 'auto');
-  if (!taskId) { console.error('用法: node src/main.js --analyze-video <taskId> [--prefer auto|gemini|frames]'); process.exit(1); }
-  if (!['auto', 'gemini', 'frames'].includes(prefer)) { console.error('prefer 必须为 auto/gemini/frames'); process.exit(1); }
+  if (!taskId) { console.error('用法: node src/main.js --analyze-video <taskId> [--prefer auto|smart|gemini|glm-frames|frames]'); process.exit(1); }
+  if (!['auto', 'smart', 'gemini', 'glm-frames', 'frames'].includes(prefer)) { console.error('prefer 必须为 auto/smart/gemini/glm-frames/frames'); process.exit(1); }
+  if (prefer === 'smart') {
+    const { analyzeTaskSmart } = await import('./smart-analysis.js');
+    console.log('开始智能视频解析（LLM 双通道定位 → 重点段密集抽帧 → 表格提取）…');
+    const r = await analyzeTaskSmart(taskId, { prefer });
+    console.log(`✓ 解析完成（路线 smart · 重点点 ${r.focusPoints.join(', ')}s）: ${r.file}`);
+    return;
+  }
+  const { analyzeTaskVideo } = await import('./video-analysis.js');
   console.log(`开始视频解析（路线 ${prefer}）…`);
   const r = await analyzeTaskVideo(taskId, { prefer });
   console.log(`✓ 解析完成（路线 ${r.route} · 模型 ${r.model}）: ${r.file}`);
@@ -273,6 +280,12 @@ async function main() {
   const { startServer } = await import('./http.js');
   const { host, port } = cfg.server;
   await startServer(port, host);
+  // FunASR 伴生：随 DanTide 启动/退出（asr.enabled=false 或 FUNASR_COMPANION=off 时不拉起）
+  if (cfg.asr?.enabled !== false && process.env.FUNASR_COMPANION !== 'off') {
+    const { startCompanionFunasr, registerCompanionCleanup } = await import('./companion.js');
+    startCompanionFunasr();
+    registerCompanionCleanup();
+  }
   const url = `http://${host}:${port}`;
   logger.info('==================================================');
   logger.info('DanTide 已就绪 🌊', { url });
