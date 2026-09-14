@@ -191,8 +191,14 @@ export async function analyzeTaskSmart(taskId, { prefer = 'auto' } = {}) {
       '看不清的内容写"无法辨认"，禁止编造数字。',
     ].join('\n');
     try {
-      const note = await chat({ prompt: visionPrompt, imageUrls: imgs, maxTokens: 3000, provider: 'vision' });
-      tableNotes.push({ time: Math.round(p.time), reason: p.reason, source: p.source, note });
+      // 网关对超大视觉负载（单次 20 帧 ≈2MB）易 520/524 超时；按 10 帧分批（实测 10 帧批次稳定）
+      const notes = [];
+      for (let i = 0; i < imgs.length; i += 10) {
+        const chunk = imgs.slice(i, i + 10);
+        const suffix = i === 0 ? '' : `（续，第 ${i + 1}-${i + chunk.length} 帧）`;
+        notes.push(await chat({ prompt: visionPrompt + suffix, imageUrls: chunk, maxTokens: 3000, provider: 'vision' }));
+      }
+      tableNotes.push({ time: Math.round(p.time), reason: p.reason, source: p.source, note: notes.join('\n\n') });
     } catch (e) {
       logger.warn('视觉细读失败（跳过该点）', { point: pi, error: e.message });
     }

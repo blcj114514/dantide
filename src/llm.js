@@ -100,12 +100,16 @@ export async function chat({ system, prompt, messages, json = false, imageUrl, i
     }
   }
 
+  const baseMaxTokens = maxTokens ?? cfg.maxTokens ?? 2000;
+  // 思考档位开启时，思考内容也计入 max_tokens——推理模型的长思考可达数千 token，
+  // 余量不足会出现"思考吃光预算、正文为空"（finish_reason=length, content=""），故按基准留足
+  const reasoningHeadroom = /^(low|high|max)$/i.test(String(cfg.reasoningEffort || ''))
+    ? Math.max(4000, baseMaxTokens)
+    : 0;
   const body = {
     model: m,
     messages: msgs,
-    // 思考档位开启时，思考内容也计入 max_tokens，额外留余量防止正文/JSON 被截断
-    max_tokens: (maxTokens ?? cfg.maxTokens ?? 2000)
-      + (/^(low|high|max)$/i.test(String(cfg.reasoningEffort || '')) ? 1200 : 0),
+    max_tokens: baseMaxTokens + reasoningHeadroom,
     stream: false,
   };
   if (json) body.response_format = { type: 'json_object' };
@@ -114,11 +118,29 @@ export async function chat({ system, prompt, messages, json = false, imageUrl, i
     body.reasoning_effort = String(cfg.reasoningEffort).toLowerCase();
   }
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${prov.apiKey}` },
-    body: JSON.stringify(body),
-  });
+  const headers = { 'Content-Type': 'application/json', Authorization: `Bearer ${prov.apiKey}` };
+  // Command Code 零数据保留通道（ZDR-or-fail: 无 ZDR 上游时直接拒绝，不会静默降级）
+  if (url.includes('commandcode.ai')) headers['x-cmd-zdr'] = '1';
+  const payload = JSON.stringify(body);
+  // 网关/上游偶发 5xx（实测 520/524）与网络抖动：退避重试两次，避免整段分析因瞬断被跳过
+  let res;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      res = await fetch(url, { method: 'POST', headers, body: payload });
+    } catch (e) {
+      if (attempt >= 3) throw new LLMError(`LLM 请求失败: ${e.message}`);
+      logger.warn('LLM 请求网络异常，退避重试', { attempt, error: e.message });
+      await new Promise((r) => setTimeout(r, 1500 * attempt));
+      continue;
+    }
+    if (res.status >= 500 && attempt < 3) {
+      const peek = await res.text().catch(() => '');
+      logger.warn('LLM 上游 5xx，退避重试', { attempt, status: res.status, detail: peek.slice(0, 120) });
+      await new Promise((r) => setTimeout(r, 1500 * attempt));
+      continue;
+    }
+    break;
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new LLMError(`LLM 请求失败 HTTP ${res.status}: ${text.slice(0, 200)}`);

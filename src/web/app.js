@@ -53,6 +53,7 @@ const PROVIDER_URLS = {
   'https://api.moonshot.cn/v1': 'Kimi',
   'https://dashscope.aliyuncs.com/compatible-mode/v1': '通义千问',
   'https://api.siliconflow.cn/v1': '硅基流动',
+  'https://api.commandcode.ai/provider/v1': 'Command Code',
 };
 let wizardStep = 1;
 

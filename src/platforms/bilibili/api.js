@@ -58,20 +58,12 @@ export async function getWbiKeys({ force = false } = {}) {
     const keys = parseKeyPair(cfg.bilibili.wbiKeys);
     if (keys) { wbiCache = { keys, timestamp: Date.now() }; return keys; }
   }
-  // 2) nav 接口（登录 Cookie 可选；过期 Cookie 时降级为匿名拉取 WBI）
+  // 2) nav 接口（登录 Cookie 可选）
+  // 注意：匿名或 cookie 失效时 nav 返回 -101，但 data.wbi_img 仍有效——只以 wbi_img 是否存在为准
   const { json } = await apiGet('https://api.bilibili.com/x/web-interface/nav');
-  if (json.code === 0 && json.data?.wbi_img) {
+  if (json.data?.wbi_img) {
     const keys = parseKeyPair(`${json.data.wbi_img.img_url}-${json.data.wbi_img.sub_url}`);
     if (keys) { wbiCache = { keys, timestamp: Date.now() }; return keys; }
-  }
-  if (json.code === -101) {
-    logger.warn('B站登录态失效（-101），改用匿名请求获取 WBI 密钥');
-    const anon = await apiGet('https://api.bilibili.com/x/web-interface/nav', { cookies: '' });
-    if (anon.json.code === 0 && anon.json.data?.wbi_img) {
-      const keys = parseKeyPair(`${anon.json.data.wbi_img.img_url}-${anon.json.data.wbi_img.sub_url}`);
-      if (keys) { wbiCache = { keys, timestamp: Date.now() }; return keys; }
-    }
-    throw new Error('B站 cookies 已失效，且匿名获取 WBI 失败: 请更新 cookies.bilibili，或清空过期 Cookie 后重试');
   }
   throw new Error(`无法获取 WBI 密钥 (nav: ${json.code} ${json.message || ''})，请检查 cookies 或网络`);
 }
