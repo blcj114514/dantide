@@ -147,7 +147,7 @@ export function createServer() {
             const { describeAsr } = await import('./asr.js');
             config.asr = describeAsr();
           } catch { /* ignore */ }
-          return json(res, 200, { ok: true, version: '0.1.0', now: new Date().toISOString(), config });
+          return json(res, 200, { ok: true, version: '0.2.2', now: new Date().toISOString(), config });
         }
         if (p === '/api/asr/presets' && req.method === 'GET') {
           const { listAsrPresets } = await import('./asr-presets.js');
@@ -480,8 +480,14 @@ export function createServer() {
           const id = safeTaskId(String(body.task_id || ''));
           if (!id) return json(res, 400, { error: '需要 task_id' });
           if (!readTask(id)) return json(res, 404, { error: '任务不存在' });
-          const prefer = ['auto', 'gemini', 'frames'].includes(body.prefer) ? body.prefer : 'auto';
+          const prefer = ['auto', 'smart', 'gemini', 'glm-frames', 'frames'].includes(body.prefer) ? body.prefer : 'auto';
           logger.info('收到视频解析请求（后台执行）', { taskId: id, prefer });
+          if (prefer === 'smart') {
+            import('./smart-analysis.js').then((m) => m.analyzeTaskSmart(id, { prefer }))
+              .then((r) => logger.info('智能视频解析完成', { taskId: id, route: r.route, points: r.focusPoints }))
+              .catch((e) => logger.error('智能视频解析失败', { taskId: id, error: e.message }));
+            return json(res, 202, { accepted: true, message: '智能解析已开始（LLM 定位 → 重点段密集抽帧 → 表格提取），结果将写入任务目录 video-analysis.md' });
+          }
           import('./video-analysis.js').then((m) => m.analyzeTaskVideo(id, { prefer }))
             .then((r) => logger.info('视频解析完成', { taskId: id, route: r.route, model: r.model }))
             .catch((e) => logger.error('视频解析失败', { taskId: id, error: e.message }));

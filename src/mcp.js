@@ -150,7 +150,7 @@ export async function handleMcpMessage(msg) {
   const { id, method, params } = msg;
   try {
     if (method === 'initialize') {
-      return { jsonrpc: '2.0', id, result: { protocolVersion: '2025-03-26', capabilities: { tools: {} }, serverInfo: { name: 'smr-mcp', version: '0.2.0' } } };
+      return { jsonrpc: '2.0', id, result: { protocolVersion: '2025-03-26', capabilities: { tools: {} }, serverInfo: { name: 'smr-mcp', version: '0.2.2' } } };
     }
     if (method === 'notifications/initialized') return null;
     if (method === 'ping') return { jsonrpc: '2.0', id, result: {} };

@@ -1,6 +1,6 @@
 {
   "name": "dantide",
-  "version": "0.2.0",
+  "version": "0.2.2",
   "description": "DanTide 弹潮 — 本地优先的社交媒体研究助手（零依赖）",
   "type": "module",
   "main": "src/main.js",
