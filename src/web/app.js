@@ -727,6 +727,13 @@ async function renderSubtitles(body) {
       <button id="asr-run" class="mini">语音转写补字幕</button>
       <label class="mini"><input id="asr-force" type="checkbox"> 覆盖已有字幕</label>
       <span id="asr-hint" class="cfg"></span>
+      <select id="va-prefer" class="mini">
+        <option value="auto">自动</option>
+        <option value="smart">智能定位</option>
+        <option value="gemini">Gemini</option>
+        <option value="glm-frames">逐帧细读</option>
+        <option value="frames">抽帧兜底</option>
+      </select>
       <button id="va-run" class="mini">🎬 AI 视频解析</button>
       <span id="va-hint" class="cfg"></span>
     </div>
@@ -759,7 +766,7 @@ async function renderSubtitles(body) {
     try {
       const r = await apiFetch('/api/analyze-video', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ task_id: taskId }),
+        body: JSON.stringify({ task_id: taskId, prefer: $('#va-prefer')?.value || 'auto' }),
       });
       const d0 = await r.json();
       if (!r.ok) throw new Error(d0.error || ('HTTP ' + r.status));
